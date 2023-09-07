@@ -41,7 +41,7 @@ const chosenConfig = pairsConfig.cbETHETH;
 ```
 
 Update the rpcURL (if needed, this one if public and works quite well)
-and select the pairConfig you want usings pairsConfig.xxx
+and select the pairConfig you want using pairsConfig.xxx
 
 The script generate a .json file, example `cbETH-WETH-500-data.json` containing all the ticks liquidities (and few other infos).
 
@@ -49,7 +49,7 @@ The script generate a .json file, example `cbETH-WETH-500-data.json` containing 
 
 To compute data you just have to start the TickComputer by running:
 
-`node ./src/LiquidityFetcher.js`
+`node ./src/TickComputer.js`
 
 It will start the function `TickComputercbETHETH` and compute the liquidity of the cbETH/ETH pool for 100 ticks. You can change the parameter in the code directly.
 
