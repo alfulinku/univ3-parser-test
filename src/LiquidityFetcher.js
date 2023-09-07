@@ -4,10 +4,13 @@ const fs = require('fs');
 const { uniswapV3PairAbi, pairsConfig } = require('./config');
 const CONSTANT_1e18 = new BigNumber(10).pow(18);
 
-async function FetchLiquidity() {
-    const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
+////////////// CONFIGURATION ////////////////////
+const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
+const chosenConfig = pairsConfig.cbETHETH;
+////////////// CONFIGURATION ////////////////////
 
-    const chosenConfig = pairsConfig.LDOETH;
+async function FetchLiquidity() {
+
     const poolAddress = chosenConfig.poolAddress;
     const deployedBlock =  chosenConfig.deployedBlock;
     const token0 = chosenConfig.token0;

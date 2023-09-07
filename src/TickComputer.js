@@ -3,8 +3,8 @@ const BigNumber = require('bignumber.js');
 const CONSTANT_1e18 = new BigNumber(10).pow(18);
 
 
-// TickComputercbETHETH();
-TickComputerLDOETH();
+TickComputercbETHETH();
+// TickComputerLDOETH();
 
 async function TickComputercbETHETH() {
     const latestData = JSON.parse(fs.readFileSync('./cbETH-WETH-500-data.json', 'utf-8'));
@@ -52,10 +52,11 @@ function getXAmountForTickCount(tickCount, currentTick, currentLiquidity, tickSp
     let totalX = 0;
     let first = true;
 
-    if(workingTick % tickSpacing == 0) {
-        first = false;
-        workingTick = workingTick + tickSpacing;
-    }
+    
+    // if(workingTick % tickSpacing == 0) {
+    //     first = false;
+    //     workingTick = workingTick + tickSpacing;
+    // }
 
     while(workingTick < currentTick + tickCount * tickSpacing) {
         let L = new BigNumber(liquidities[workingTick]).times(CONSTANT_1e18);
