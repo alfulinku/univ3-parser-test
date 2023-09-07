@@ -3,20 +3,39 @@ const BigNumber = require('bignumber.js');
 const CONSTANT_1e18 = new BigNumber(10).pow(18);
 
 
-async function TickComputer() {
+// TickComputercbETHETH();
+TickComputerLDOETH();
+
+async function TickComputercbETHETH() {
     const latestData = JSON.parse(fs.readFileSync('./cbETH-WETH-500-data.json', 'utf-8'));
 
     console.log(`Starting tick computer, starting tick: ${latestData.currentTick}`);
 
-    const tickCount = 200; // this is the amount of tick we want to get the liquidity from, starting from current tick. Example starting from current == 470, will sum liquidity for 470, then 460, then 450 etc..
+    // this is the amount of tick we want to get the liquidity from, starting from current tick.
+    // Example starting from current == 470, will sum liquidity for 470, then 460, then 450 etc..
+    const tickCount = 100;
     const newResultX = getXAmountForTickCount(tickCount, latestData.currentTick, latestData.lastLiquidity, latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
     console.log('------------------------------------');
     const newResultY = getYAmountForTickCount(tickCount, latestData.currentTick, latestData.lastLiquidity, latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
-    console.log(`TotalX (cbETH) available: ${newResultX}`);
-    console.log(`TotalY (ETH) available: ${newResultY}`);
+    console.log(`TotalX (cbETH) available in ${tickCount} ticks: ${newResultX}`);
+    console.log(`TotalY (ETH) available in ${tickCount} ticks: ${newResultY}`);
 }
 
-TickComputer();
+async function TickComputerLDOETH() {
+    // const latestData = JSON.parse(fs.readFileSync('./cbETH-WETH-500-data.json', 'utf-8'));
+    const latestData = JSON.parse(fs.readFileSync('./LDO-WETH-3000-data.json', 'utf-8'));
+
+    console.log(`Starting tick computer, starting tick: ${latestData.currentTick}`);
+
+    // this is the amount of tick we want to get the liquidity from, starting from current tick.
+    // Example starting from current == 470, will sum liquidity for 470, then 460, then 450 etc..
+    const tickCount = 2;
+    const newResultX = getXAmountForTickCount(tickCount, latestData.currentTick, latestData.lastLiquidity, latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
+    console.log('------------------------------------');
+    const newResultY = getYAmountForTickCount(tickCount, latestData.currentTick, latestData.lastLiquidity, latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
+    console.log(`TotalX (LDO) available in ${tickCount} ticks: ${newResultX}`);
+    console.log(`TotalY (ETH) available in ${tickCount} ticks: ${newResultY}`);
+}
 
 
 /**
@@ -32,6 +51,12 @@ function getXAmountForTickCount(tickCount, currentTick, currentLiquidity, tickSp
     let workingTick = currentTick;
     let totalX = 0;
     let first = true;
+
+    if(workingTick % tickSpacing == 0) {
+        first = false;
+        workingTick = workingTick + tickSpacing;
+    }
+
     while(workingTick < currentTick + tickCount * tickSpacing) {
         let L = new BigNumber(liquidities[workingTick]).times(CONSTANT_1e18);
         if(first) {

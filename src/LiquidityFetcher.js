@@ -1,25 +1,24 @@
 const { default: BigNumber } = require('bignumber.js');
 const { ethers, Contract } = require('ethers');
 const fs = require('fs');
-const { uniswapV3PairAbi } = require('./config');
+const { uniswapV3PairAbi, pairsConfig } = require('./config');
 const CONSTANT_1e18 = new BigNumber(10).pow(18);
 
 async function FetchLiquidity() {
-
     const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
-    const poolAddress = '0x840DEEef2f115Cf50DA625F7368C24af6fE74410';
-    const deployedBlock = 15404282;
-    const pairConfig = {
-        'token0': 'cbETH',
-        'token1': 'WETH',
-        'fees': 500
-    };
+
+    const chosenConfig = pairsConfig.LDOETH;
+    const poolAddress = chosenConfig.poolAddress;
+    const deployedBlock =  chosenConfig.deployedBlock;
+    const token0 = chosenConfig.token0;
+    const token1 = chosenConfig.token1;
+    const fees = chosenConfig.fees;
     
     const web3Provider = new ethers.providers.StaticJsonRpcProvider(rpcUrl);
     const currentBlock = await web3Provider.getBlockNumber();
     const univ3PairContract = new Contract(poolAddress, uniswapV3PairAbi, web3Provider);
 
-    const latestData = await fetchInitializeData(web3Provider, poolAddress, univ3PairContract, deployedBlock);
+    const latestData = await fetchInitializeData(univ3PairContract, deployedBlock);
     latestData.poolAddress = poolAddress;
 
     const filterBurn = univ3PairContract.filters.Burn();
@@ -28,11 +27,11 @@ async function FetchLiquidity() {
     let iface = new ethers.utils.Interface(uniswapV3PairAbi);
 
     const initBlockStep = 50000;
+    const maxBlockStep = 500000;
     let blockStep = initBlockStep;
     let fromBlock =  latestData.blockNumber + 1;
     let toBlock = 0;
     let cptError = 0;
-    let cptCollect = 0;
     while(toBlock < currentBlock) {
         toBlock = fromBlock + blockStep - 1;
         if(toBlock > currentBlock) {
@@ -61,7 +60,7 @@ async function FetchLiquidity() {
             continue;
         }
 
-        console.log(`$[${pairConfig.token0}-${pairConfig.token1}-${pairConfig.fees}]: [${fromBlock} - ${toBlock}] found ${events.length} Mint/Burn/Swap events after ${cptError} errors (fetched ${toBlock-fromBlock+1} blocks)`);
+        console.log(`[${token0}-${token1}-${fees}]: [${fromBlock} - ${toBlock}] found ${events.length} Mint/Burn/Swap events after ${cptError} errors (fetched ${toBlock-fromBlock+1} blocks)`);
         
         if(events.length != 0) {
             for (const event of events) {
@@ -70,13 +69,13 @@ async function FetchLiquidity() {
                     case 'mint':
                         if (parsedEvent.args.amount.gt(0)) {
                             const lqtyToAdd = new BigNumber(parsedEvent.args.amount.toString());
-                            updateLatestDataLiquidity(latestData, event.blockNumber, parsedEvent.args.tickLower, parsedEvent.args.tickUpper, lqtyToAdd, latestData.tickSpacing);
+                            updateLatestDataLiquidity(latestData, parsedEvent.args.tickLower, parsedEvent.args.tickUpper, lqtyToAdd);
                         }
                         break;
                     case 'burn':
                         if (parsedEvent.args.amount.gt(0)) {
                             const lqtyToSub = new BigNumber(-1).times(new BigNumber(parsedEvent.args.amount.toString()));
-                            updateLatestDataLiquidity(latestData, event.blockNumber, parsedEvent.args.tickLower, parsedEvent.args.tickUpper, lqtyToSub, latestData.tickSpacing);
+                            updateLatestDataLiquidity(latestData, parsedEvent.args.tickLower, parsedEvent.args.tickUpper, lqtyToSub);
                         }
                         break;
                     case 'swap':
@@ -99,6 +98,10 @@ async function FetchLiquidity() {
                 blockStep = newBlockStep;
             }
 
+            if(blockStep > maxBlockStep) {
+                blockStep = maxBlockStep;
+            }
+
             cptError = 0;
         } else {
             // if 0 events, multiply blockstep by 4
@@ -106,16 +109,11 @@ async function FetchLiquidity() {
         }
         fromBlock = toBlock +1;
     }
-
-    console.log('cptCollect', cptCollect);
-    console.log('lastLiquidity', latestData.lastLiquidity.toString());
     
-    fs.writeFileSync(`${pairConfig.token0}-${pairConfig.token1}-${pairConfig.fees}-data.json`, JSON.stringify(latestData)); 
+    fs.writeFileSync(`${token0}-${token1}-${fees}-data.json`, JSON.stringify(latestData)); 
 }
 
-async function fetchInitializeData(web3Provider, poolAddress, univ3PairContract, deployedBlock) {
-    // if the file does not exists, it means we start from the beginning
-    // fetch the deployed block number for the pool
+async function fetchInitializeData(univ3PairContract, deployedBlock) {
     let fromBlock = deployedBlock;
     let toBlock = deployedBlock + 100000;
     let latestData = undefined;
@@ -132,15 +130,10 @@ async function fetchInitializeData(web3Provider, poolAddress, univ3PairContract,
             latestData = {
                 currentTick: initEvents[0].args.tick,
                 currentSqrtPriceX96: initEvents[0].args.sqrtPriceX96.toString(),
-                blockNumber: initEvents[0].blockNumber - 1, // set to blocknumber -1 to be sure to fetch mint/burn events on same block as initialize,
                 tickSpacing: await univ3PairContract.tickSpacing(),
-                lastCheckpoint: 0, // set to 0 to save liquidity check point at the begining
-                lastDataSave: 0, // set to 0 to save data at the beginning
-                ticks: {}
+                ticks: {},
+                blockNumber: initEvents[0].blockNumber - 1
             };
-
-            // fs.appendFileSync('logs.txt', `Initialized at ${initEvents[0].blockNumber}. base tick ${latestData.currentTick}. base price: ${latestData.currentSqrtPriceX96}\n`);
-
         } else {
             console.log(`Initialize event not found between blocks [${fromBlock} - ${toBlock}]`);
             fromBlock = toBlock + 1;
@@ -151,11 +144,7 @@ async function fetchInitializeData(web3Provider, poolAddress, univ3PairContract,
 }
 
 
-function updateLatestDataLiquidity(latestData, blockNumber, tickLower, tickUpper, amount, tickSpacing) {
-    // console.log(`Adding ${amount} from ${tickLower} to ${tickUpper}`);
-    // if(tickUpper >= 600 && tickLower <= 570) {
-    //     console.log('hello');
-    // }
+function updateLatestDataLiquidity(latestData, tickLower, tickUpper, amount) {
     const amountNorm = amount.div(CONSTANT_1e18).toNumber();
     for(let tick = tickLower ; tick <= tickUpper ; tick += 1) {
         if(!latestData.ticks[tick]) {
