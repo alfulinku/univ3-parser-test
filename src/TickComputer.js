@@ -10,7 +10,7 @@ const web3Provider = new ethers.providers.StaticJsonRpcProvider(rpcUrl);
 TickComputer();
 
 async function TickComputer() {
-    const chosenConfig = pairsConfig.wstETHETH;
+    const chosenConfig = pairsConfig.cbETHETH;
     const fileName = `${chosenConfig.token0}-${chosenConfig.token1}-${chosenConfig.fees}-data.json`;
     const latestData = JSON.parse(fs.readFileSync(fileName, 'utf-8'));
     console.log('------------------------------------');
@@ -32,15 +32,16 @@ async function TickComputer() {
     const poolHoldingToken1Normalized = new BigNumber(poolHoldingToken1.toString()).div(new BigNumber(10).pow(token1Decimals)).toNumber();
 
     console.log(`Starting tick computer, starting tick: ${latestData.currentTick}`);
-    console.log(`${latestData.ticks[latestData.currentTick]} / ${new BigNumber(latestData.lastLiquidity).div(CONSTANT_1e18).toNumber()}`);
+    console.log(`${latestData.ticks[latestData.currentTick]} --> Liquidity at tick ${latestData.currentTick}`);
+    console.log(`${new BigNumber(latestData.lastLiquidity).div(CONSTANT_1e18).toNumber()} --> Liquidity from last swap`);
 
-    // const amountOfWethToSell = new BigNumber(100_000).times(CONSTANT_1e18);
-    // const amountOfwstEth = get_dx(latestData.currentTick, 
-    //     latestData.tickSpacing,
-    //     latestData.currentSqrtPriceX96,
-    //     latestData.ticks,
-    //     amountOfWethToSell);
-    // console.log(`${chosenConfig.token0}:`, amountOfwstEth.div(CONSTANT_1e18).toNumber());
+    const amountOfWethToSell = new BigNumber(100_000).times(CONSTANT_1e18);
+    const amountOfwstEth = get_dx(latestData.currentTick, 
+        latestData.tickSpacing,
+        latestData.currentSqrtPriceX96,
+        latestData.ticks,
+        amountOfWethToSell);
+    console.log(`${chosenConfig.token0} from get_dx:`, amountOfwstEth.div(CONSTANT_1e18).toNumber());
 
     // this is the amount of tick we want to get the liquidity from, starting from current tick.
     // Example starting from current == 470, will sum liquidity for 470, then 460, then 450 etc..
@@ -92,7 +93,7 @@ function getXAmountForTickCount(tickCount, currentTick, tickSpacing, liquidities
             const sqrtPa = Math.sqrt(pa);
             // pb = upper bound price range
             const upperBoundTick = lowerBoundTick + tickSpacing;
-            const pb = getTickPrice(lowerBoundTick);
+            const pb = getTickPrice(upperBoundTick);
             const sqrtPb = Math.sqrt(pb);
             let xLiquidityInTick = 0;
 
@@ -124,9 +125,9 @@ function getXAmountForTickCount(tickCount, currentTick, tickSpacing, liquidities
             }
         }
 
-        if(workingTick == currentTick && workingTick % tickSpacing == 0) {
-            workingTick += tickSpacing;
-        }
+        // if(workingTick == currentTick && workingTick % tickSpacing == 0) {
+        //     workingTick += tickSpacing;
+        // }
         workingTick += tickSpacing;
     }
 

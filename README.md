@@ -9,6 +9,7 @@ You can start the liquidity fetch by running this:
 `node ./src/LiquidityFetcher.js`
 
 The default config make it fetch the liquidity values for the pool cbETH/ETH
+If the data file already exists, just fetch from the last block fetched to the most current block.
 You can see the presaved configs in ./src/config.js in the variable `pairsConfig`
 
 ```
@@ -49,9 +50,9 @@ The script generate a .json file, example `cbETH-WETH-500-data.json` containing 
 
 To compute data you just have to start the TickComputer by running:
 
-`node ./src/TickComputer.js`
+`node ./src/TickComputer.js X` with X = number of ticks to include. The more you includes, the most close to the total liquidity available in the pool you should have
 
-It will start the function `TickComputercbETHETH` and compute the liquidity of the cbETH/ETH pool for 100 ticks. You can change the parameter in the code directly.
+It will start the function `TickComputer` and compute the liquidity of the cbETH/ETH pool for 5 ticks. You can change the parameter in the code directly.
 
 Example when running this function with 10 tickCount:
 
@@ -82,4 +83,9 @@ TotalX (cbETH) available in 10 ticks: 3445.980669840577
 TotalY (ETH) available in 10 ticks: 1424.0468558763946
 ```
 
+It will also display how much balance there is in the pool
 You can then compare the results with what is in the pool: https://etherscan.io/address/0x840DEEef2f115Cf50DA625F7368C24af6fE74410
+
+# get_dx
+
+The get dx function is also called to see the result it output for a very big amount of y (100_000 units in the code)
