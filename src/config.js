@@ -19,7 +19,13 @@ const pairsConfig = {
         token0: 'LDO',
         token1: 'WETH',
         fees: 3000
-        
+    },
+    TestPolygon: {
+        poolAddress: '0xEcF9a0f3C1646335C8eDf24ad65fb82471ad5543',
+        deployedBlock: 47288244,
+        token0: 'BBB',
+        token1: 'AAA',
+        fees: 500
     }
 };
 module.exports = {uniswapV3PairAbi, pairsConfig, erc20ABI};

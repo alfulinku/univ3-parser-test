@@ -5,8 +5,9 @@ const { uniswapV3PairAbi, pairsConfig } = require('./config');
 const CONSTANT_1e18 = new BigNumber(10).pow(18);
 
 ////////////// CONFIGURATION ////////////////////
-const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
-const chosenConfig = pairsConfig.cbETHETH;
+// const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
+const rpcUrl = 'https://polygon.llamarpc.com'; // --> use infura for a faster fetch
+const chosenConfig = pairsConfig.TestPolygon;
 ////////////// CONFIGURATION ////////////////////
 
 async function FetchLiquidity() {
@@ -113,6 +114,7 @@ async function FetchLiquidity() {
         fromBlock = toBlock +1;
     }
     
+    console.log(`current tick: ${latestData.currentTick}`);
     fs.writeFileSync(`${token0}-${token1}-${fees}-data.json`, JSON.stringify(latestData)); 
 }
 
