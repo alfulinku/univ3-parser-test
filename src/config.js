@@ -26,6 +26,14 @@ const pairsConfig = {
         token0: 'BBB',
         token1: 'AAA',
         fees: 500
+    },
+    wstETHETH: {
+        poolAddress: '0x109830a1aaad605bbf02a9dfa7b0b92ec2fb7daa',
+        deployedBlock: 15384250,
+        token0: 'wstETH',
+        token1: 'WETH',
+        fees: 100
+        
     }
 };
 module.exports = {uniswapV3PairAbi, pairsConfig, erc20ABI};

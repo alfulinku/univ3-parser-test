@@ -5,9 +5,9 @@ const { uniswapV3PairAbi, pairsConfig } = require('./config');
 const CONSTANT_1e18 = new BigNumber(10).pow(18);
 
 ////////////// CONFIGURATION ////////////////////
-// const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
-const rpcUrl = 'https://polygon.llamarpc.com'; // --> use infura for a faster fetch
-const chosenConfig = pairsConfig.TestPolygon;
+const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
+// const rpcUrl = 'https://polygon.llamarpc.com'; // --> use infura for a faster fetch
+const chosenConfig = pairsConfig.wstETHETH;
 ////////////// CONFIGURATION ////////////////////
 
 async function FetchLiquidity() {
@@ -22,7 +22,14 @@ async function FetchLiquidity() {
     const currentBlock = await web3Provider.getBlockNumber();
     const univ3PairContract = new Contract(poolAddress, uniswapV3PairAbi, web3Provider);
 
-    const latestData = await fetchInitializeData(univ3PairContract, deployedBlock);
+    const lastDataFilename = `${token0}-${token1}-${fees}-data.json`;
+    let latestData = undefined;
+    if(fs.existsSync(lastDataFilename)) {
+        latestData = JSON.parse(fs.readFileSync(lastDataFilename, 'utf-8'));
+    } else {
+        latestData = await fetchInitializeData(univ3PairContract, deployedBlock);
+    }
+    
     latestData.poolAddress = poolAddress;
 
     const filterBurn = univ3PairContract.filters.Burn();
@@ -87,6 +94,7 @@ async function FetchLiquidity() {
                             latestData.currentSqrtPriceX96 = parsedEvent.args.sqrtPriceX96.toString();
                             latestData.currentTick = parsedEvent.args.tick;
                             latestData.lastLiquidity = parsedEvent.args.liquidity.toString();
+                            latestData.lastSwapBlock = event.blockNumber;
                         }
                         break;
                 }
@@ -112,10 +120,11 @@ async function FetchLiquidity() {
             blockStep = blockStep * 2;
         }
         fromBlock = toBlock +1;
+        latestData.blockNumber = toBlock;
     }
     
     console.log(`current tick: ${latestData.currentTick}`);
-    fs.writeFileSync(`${token0}-${token1}-${fees}-data.json`, JSON.stringify(latestData)); 
+    fs.writeFileSync(lastDataFilename, JSON.stringify(latestData)); 
 }
 
 async function fetchInitializeData(univ3PairContract, deployedBlock) {
@@ -136,8 +145,10 @@ async function fetchInitializeData(univ3PairContract, deployedBlock) {
                 currentTick: initEvents[0].args.tick,
                 currentSqrtPriceX96: initEvents[0].args.sqrtPriceX96.toString(),
                 tickSpacing: await univ3PairContract.tickSpacing(),
+                blockNumber: initEvents[0].blockNumber - 1,
+                lastLiquidity: 0,
+                lastSwapBlock: 0,
                 ticks: {},
-                blockNumber: initEvents[0].blockNumber - 1
             };
         } else {
             console.log(`Initialize event not found between blocks [${fromBlock} - ${toBlock}]`);
