@@ -4,13 +4,13 @@ const { pairsConfig, uniswapV3PairAbi, erc20ABI } = require('./config');
 const { ethers, Contract } = require('ethers');
 const CONSTANT_1e18 = new BigNumber(10).pow(18);
 const rpcUrl = 'https://eth-mainnet.rpcfast.com?api_key=xbhWBI1Wkguk8SNMu1bvvLurPGLXmgwYeC4S6g2H7WdwFigZSmPWVZRxrskEQwIf'; // --> use infura for a faster fetch
-
+// const rpcUrl = 'https://polygon.llamarpc.com';
 const web3Provider = new ethers.providers.StaticJsonRpcProvider(rpcUrl);
 
 TickComputer();
 
 async function TickComputer() {
-    const chosenConfig = pairsConfig.cbETHETH;
+    const chosenConfig = pairsConfig.wstETHETH;
     const fileName = `${chosenConfig.token0}-${chosenConfig.token1}-${chosenConfig.fees}-data.json`;
     const latestData = JSON.parse(fs.readFileSync(fileName, 'utf-8'));
     console.log('------------------------------------');
@@ -35,23 +35,10 @@ async function TickComputer() {
     console.log(`${latestData.ticks[latestData.currentTick]} --> Liquidity at tick ${latestData.currentTick}`);
     console.log(`${new BigNumber(latestData.lastLiquidity).div(CONSTANT_1e18).toNumber()} --> Liquidity from last swap`);
 
-    const amountOfWethToSell = new BigNumber(100_000).times(CONSTANT_1e18);
-    const amountOfwstEth = get_dx(latestData.currentTick, 
-        latestData.tickSpacing,
-        latestData.currentSqrtPriceX96,
-        latestData.ticks,
-        amountOfWethToSell);
-    console.log(`${chosenConfig.token0} from get_dx:`, amountOfwstEth.div(CONSTANT_1e18).toNumber());
-
-    // this is the amount of tick we want to get the liquidity from, starting from current tick.
-    // Example starting from current == 470, will sum liquidity for 470, then 460, then 450 etc..
-    const tickCount = Number(process.argv[2] || 5);
-    const newResultX = getXAmountForTickCount(tickCount, latestData.currentTick , latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
-    const newResultY = getYAmountForTickCount(tickCount, latestData.currentTick, latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
-    console.log(`TotalX (${chosenConfig.token0}) available in ${tickCount} ticks: ${newResultX}. BalanceOf pool: ${poolHoldingToken0Normalized}`);
-    console.log(`TotalY (${chosenConfig.token1}) available in ${tickCount} ticks: ${newResultY}. BalanceOf pool: ${poolHoldingToken1Normalized}`);
-
-    // compare liquidity with what's on the pool
+    const resultX = GetXAmountForSlippages(latestData.currentTick , latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
+    const resultY = GetYAmountForSlippages(latestData.currentTick, latestData.tickSpacing, latestData.ticks, 18, latestData.currentSqrtPriceX96);
+    console.log(`TotalX (${chosenConfig.token0}) available for 20% slippage: ${resultX[2000]}. BalanceOf pool: ${poolHoldingToken0Normalized}`);
+    console.log(`TotalY (${chosenConfig.token1}) available for 20% slippage: ${resultY[2000]}. BalanceOf pool: ${poolHoldingToken1Normalized}`);
 }
 
 
@@ -62,29 +49,40 @@ function getTickForPrice(price) {
 }
 
 /**
- * Returns the amount available for X (token0) in 'tickCount' ticks (including current tick)
+ * Returns the amount available for X (token0) in a slippageMap from 50 bps to 2000 bps slippage
  * When possible, the notation are the same as https://atiselsts.github.io/pdfs/uniswap-v3-liquidity-math.pdf
+ * @param {number} currentTick 
+ * @param {number} tickSpacing 
+ * @param {{[tick: number]: number}} liquidities 
+ * @param {number} tokenDecimals 
+ * @param {string} sqrtPriceX96 
+ * @returns {[slippageBps: number]: number}
  */
-function getXAmountForTickCount(tickCount, currentTick, tickSpacing, liquidities, tokenDecimals, sqrtPriceX96) {
+function GetXAmountForSlippages(currentTick, tickSpacing, liquidities, tokenDecimals, sqrtPriceX96) {
+    const result = {};
     const _96bits = new BigNumber(2).pow(new BigNumber(96));
     const sqrtP = new BigNumber(sqrtPriceX96).div(_96bits); 
     const P = sqrtP.times(sqrtP).toNumber();
     const decimalFactor = new BigNumber(10).pow(tokenDecimals);
 
-    let workingTick = currentTick;
+    let workingTick = getNextLowerTick(currentTick, tickSpacing);
     let totalX = 0;
 
-    
-    const tickForPrice = getTickForPrice(P);
-    console.log(`P: ${P}, tick: ${currentTick}, realTickForPrice: ${tickForPrice}`);
-    // if(workingTick % tickSpacing == 0) {
-    //     first = false;
-    //     workingTick = workingTick + tickSpacing;
-    // }
+    // store tick [tickNumber]: slippageBps
+    const relevantTicks = {};
+    for(let slippageBps = 50; slippageBps <= 2000; slippageBps += 50) {
+        const targetPrice = P * (10000 + slippageBps)/10000;
+        const targetPriceTick = getTickForPrice(targetPrice);
+        const spacingTargetPriceTick = getNextLowerTick(targetPriceTick, tickSpacing);
+        if(!relevantTicks[spacingTargetPriceTick] && spacingTargetPriceTick > workingTick ) {
+            relevantTicks[spacingTargetPriceTick] = slippageBps;
+        }
+        console.log({P}, {targetPrice}, {currentTick}, {targetPriceTick});
+    }
 
-    while(workingTick < currentTick + tickCount * tickSpacing) {
+    const maxTarget = Math.max(...Object.keys(relevantTicks).map(_ => Number(_)));
+    while(workingTick <= maxTarget) {
         const L = new BigNumber(liquidities[workingTick]).times(CONSTANT_1e18);
-        // console.log(`TICK ${workingTick}, L: ${liquidities[workingTick]}`);
 
         if(!L.isNaN()) {
             // pa = lower bound price range
@@ -97,58 +95,69 @@ function getXAmountForTickCount(tickCount, currentTick, tickSpacing, liquidities
             const sqrtPb = Math.sqrt(pb);
             let xLiquidityInTick = 0;
 
-            // console.log('P', P);
-            // console.log('pa', pa);
-            // console.log('pb', pb);
-            let tickType = '';
             // Assuming P ≤ pa, the position is fully in X, so y = 0
             if(P <= pa) {
-                tickType = 'ONLY X';
                 const x = L.times(sqrtPb - sqrtPa).div(sqrtPa * sqrtPb);
                 xLiquidityInTick = x.div(decimalFactor).toNumber();
             } 
             // Assuming P ≥ pb, the position is fully in Y , so x = 0:
             else if(P >= pb) {
-            // We want X so don't care for this case
-                tickType = 'ONLY Y';
+                // We want X so don't care for this case
             } 
             // If the current price is in the range: pa < P < pb. mix of x and y
             else {
-                tickType = 'MIX';
                 const x = L.times(sqrtPb - sqrtP).div(sqrtP * sqrtPb);
                 xLiquidityInTick = x.div(decimalFactor).toNumber();
             }
 
             totalX += xLiquidityInTick;
-            if(tickCount <= 10) {
-                console.log(`${workingTick} [${getTickPrice(workingTick)}] [${tickType}]: xLiquidity at tick: ${xLiquidityInTick}. New total: ${totalX}`);
+            if(relevantTicks[workingTick]) {
+                result[relevantTicks[workingTick]] = totalX;
             }
         }
-
-        // if(workingTick == currentTick && workingTick % tickSpacing == 0) {
-        //     workingTick += tickSpacing;
-        // }
+        
         workingTick += tickSpacing;
     }
 
-    return totalX;
+    return result;
 }
 
 
+
 /**
- * Returns the amount available for Y (token1) in 'tickCount' ticks (including current tick)
+ * Returns the amount available for X (token0) in a slippageMap from 50 bps to 2000 bps slippage
  * When possible, the notation are the same as https://atiselsts.github.io/pdfs/uniswap-v3-liquidity-math.pdf
+ * @param {number} currentTick 
+ * @param {number} tickSpacing 
+ * @param {{[tick: number]: number}} liquidities 
+ * @param {number} tokenDecimals 
+ * @param {string} sqrtPriceX96 
+ * @returns {[slippageBps: number]: number}
  */
-function getYAmountForTickCount(tickCount,currentTick, tickSpacing, liquidities, tokenDecimals, sqrtPriceX96) {
+function GetYAmountForSlippages(currentTick, tickSpacing, liquidities, tokenDecimals, sqrtPriceX96) {
+    const result = {};
     const _96bits = new BigNumber(2).pow(new BigNumber(96));
-    const sqrtP = new BigNumber(sqrtPriceX96).div(_96bits); 
+    const sqrtP = new BigNumber(sqrtPriceX96).div(_96bits);
     const P = sqrtP.times(sqrtP).toNumber();
     const decimalFactor = new BigNumber(10).pow(tokenDecimals);
 
-    let workingTick = currentTick;
+    let workingTick = getNextLowerTick(currentTick, tickSpacing);
+    
+    // store tick [tickNumber]: slippageBps
+    const relevantTicks = {};
+    for(let slippageBps = 50; slippageBps <= 2000; slippageBps += 50) {
+        const targetPrice = P * (10000 - slippageBps)/10000;
+        const targetPriceTick = getTickForPrice(targetPrice);
+        const spacingTargetPriceTick = getNextLowerTick(targetPriceTick, tickSpacing);
+        if(!relevantTicks[spacingTargetPriceTick] && spacingTargetPriceTick < workingTick ) {
+            relevantTicks[spacingTargetPriceTick] = slippageBps;
+        }
+    }
+    
+    const minTarget = Math.min(...Object.keys(relevantTicks).map(_ => Number(_)));
+
     let totalY = 0;
-    let first = true;
-    while(workingTick > currentTick - tickCount * tickSpacing) {
+    while(workingTick >= minTarget) {
         const L = new BigNumber(liquidities[workingTick]).times(CONSTANT_1e18);
         if(!L.isNaN()) {
         // pa = lower bound price range
@@ -161,42 +170,31 @@ function getYAmountForTickCount(tickCount,currentTick, tickSpacing, liquidities,
             const sqrtPb = Math.sqrt(pb);
             let yLiquidityInTick = 0;
 
-            let tickType = '';
-
             // Assuming P ≤ pa, the position is fully in X, so y = 0
             if(P <= pa) {
-                tickType = 'ONLY X';
             // We want X so don't care for this case
             } 
             // Assuming P ≥ pb, the position is fully in Y , so x = 0:
             else if(P >= pb) {
-                tickType = 'ONLY Y';
                 const y = L.times(sqrtPb - sqrtPa);
                 yLiquidityInTick = y.div(decimalFactor).toNumber();
             } 
             // If the current price is in the range: pa < P < pb. mix of x and y
             else {
-                tickType = 'MIX';
                 const y = L.times(sqrtP - sqrtPa);
                 yLiquidityInTick = y.div(decimalFactor).toNumber();
             }
 
             totalY += yLiquidityInTick;
-            
-            if(tickCount <= 10) {
-                console.log(`${workingTick} [${getTickPrice(workingTick)}] [${tickType}]: yLiquidity at tick: ${yLiquidityInTick}. New total: ${totalY}`);
+            if(relevantTicks[workingTick]) {
+                result[relevantTicks[workingTick]] = totalY;
             }
         }
 
         workingTick -= tickSpacing;
-        
-        // if(first) {
-        //     first = false;
-        //     workingTick -= tickSpacing;
-        // }
     }
 
-    return totalY;
+    return result;
 }
 
 
@@ -213,59 +211,4 @@ function getTickPrice(tick) {
  */
 function getNextLowerTick(currentTick, tickSpacing) {
     return (Math.floor(currentTick / tickSpacing)) * tickSpacing;
-}
-
-
-function get_dx(tick, tickSpacing, sqrtPriceX96, liquidity, dy) {
-    const base = new BigNumber(1.0001);
-
-    let remainingQty = new BigNumber(dy);
-    let dx = new BigNumber(0);
-    BigNumber.config({ POW_PRECISION: 10 });
-    const _96bits = new BigNumber(2).pow(new BigNumber(96));
-    let currSqrtPrice = new BigNumber(sqrtPriceX96).div(_96bits); 
-    let currTick = Number(tick);
-
-    // when selling y, the price goes down
-    while(remainingQty.gt(0)) {
-        const nextTick = currTick - (currTick % Number(tickSpacing)) + Number(tickSpacing)
-        //console.log({base},{nextTick})
-        const nextSqrtPrice = (base.pow(nextTick)).sqrt();
-
-        const L = new BigNumber(liquidity[currTick]).times(CONSTANT_1e18);
-        // console.log({currTick});
-
-        // dx = L/d(sqrt(p))
-        const maxDy = L.times(nextSqrtPrice.minus(currSqrtPrice));
-        // console.log(L.toString(), maxDy.toString(), currSqrtPrice.toString());
-
-        //console.log(currSqrtPrice.toString(), nextSqrtPrice.toString())
-
-        let nextP;
-        if(remainingQty.lt(maxDy)) {
-            // qty = L(nextP - P)
-            // nextP = p + qty/L
-            nextP = currSqrtPrice.plus(remainingQty.div(L));
-            remainingQty = new BigNumber(0);
-        }
-        else {
-            nextP = nextSqrtPrice;
-            remainingQty = remainingQty.minus(maxDy);
-            // console.log('maxDy', maxDy.toString());
-        }
-
-        // dx = L/pcurrent - L/pnext
-        dx = dx.plus(L.div(currSqrtPrice).minus(L.div(nextP)));
-        // console.log(nextP.toString(), currSqrtPrice.toString());
-
-
-        // console.log('dx', dx.toString(), remainingQty.toString(), currTick);
-
-
-        // move to next tick
-        currSqrtPrice = nextSqrtPrice;
-        currTick = nextTick;
-    }
-
-    return dx;
 }

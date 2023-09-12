@@ -162,7 +162,7 @@ async function fetchInitializeData(univ3PairContract, deployedBlock) {
 
 function updateLatestDataLiquidity(latestData, tickLower, tickUpper, amount) {
     const amountNorm = amount.div(CONSTANT_1e18).toNumber();
-    for(let tick = tickLower ; tick <= tickUpper ; tick += 1) {
+    for(let tick = tickLower ; tick < tickUpper ; tick += latestData.tickSpacing) {
         if(!latestData.ticks[tick]) {
             latestData.ticks[tick] = 0;
         }
